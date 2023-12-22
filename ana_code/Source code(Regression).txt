@@ -1,0 +1,112 @@
+// all code in spark
+
+
+// combine dataframes
+val db = spark.sql("use yc4547_nyu_edu")
+
+val table = spark.sql("show tables")
+
+val weather_22 = spark.sql("select *from weathert")
+
+val weather_23 = spark.sql("select *from weathert_22")
+
+val weather = weather_22.union(weather_23)
+
+
+// import
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.sql.functions._
+
+
+// Linear Regression(Relationship between windspeed(X) and precipitation(Y))
+
+val assembler = new VectorAssembler().setInputCols(Array("windspeed")).setOutputCol("features")
+
+val weatherTransformed = assembler.transform(weather).select(col("features"),col("precipitation").as("label"))
+
+val Array(trainingData, testData) = weatherTransformed.randomSplit(Array(0.7,0.3))
+
+val lr = new LinearRegression()
+
+val lrModel = lr.fit(trainingData)
+
+val predictions = lrModel.transform(testData)
+
+println(s"coefficients: ${lrModel.coefficients}")
+
+val summary = lrModel.summary
+
+println(s"r2: ${summary.r2}")
+
+
+// Multiple Regressions(Relationship between temperature and windspeed(X) with humidity(Y))
+
+val assembler = new VectorAssembler().setInputCols(Array("temperature","windspeed")).setOutputCol("features")
+
+val weatherTransformed = assembler.transform(weather).select(col("features"),col("humidity").as("label"))
+
+val Array(trainingData, testData) = weatherTransformed.randomSplit(Array(0.7,0.3))
+
+val lr = new LinearRegression()
+
+val lrModel = lr.fit(trainingData)
+
+val predictions = lrModel.transform(testData)
+
+predictions.select("features", "label", "prediction").show()
+
+println(s"coefficients: ${lrModel.coefficients}")
+
+val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction")
+
+val rmse = evaluator.setMetricName("rmse").evaluate(predictions)
+
+val r2 = evaluator.setMetricName("r2").evaluate(predictions)
+
+
+// Relationship_1 between precipitation(X) and humidity(Y) (without considering temperature)
+
+val assembler = new VectorAssembler().setInputCols(Array("precipitation")).setOutputCol("features")
+
+val weatherTransformed = assembler.transform(weather).select(col("features"),col("humidity").as("label"))
+
+val Array(trainingData, testData) = weatherTransformed.randomSplit(Array(0.7,0.3))
+
+val lr = new LinearRegression()
+
+val lrModel = lr.fit(trainingData)
+
+val predictions = lrModel.transform(testData)
+
+println(s"coefficients: ${lrModel.coefficients}")
+
+val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction")
+
+val rmse = evaluator.setMetricName("rmse").evaluate(predictions)
+
+
+// Relationship_2 between precipitation(X) and humidity(Y)  (temperature < 5 or > 25)
+
+val filteredWeather = weather.filter($"temperature" < 5 || $"temperature" > 25)
+
+val assembler = new VectorAssembler().setInputCols(Array("precipitation")).setOutputCol("features")
+
+val preparedData = assembler.transform(filteredWeather)
+
+val Array(trainingData, testData) = preparedData.randomSplit(Array(0.7,0.3))
+
+val lr = new LinearRegression()
+
+val lrModel = lr.fit(trainingData)
+
+println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
+
+val predictions = lrModel.transform(preparedData)
+
+val evaluator = new RegressionEvaluator().setLabelCol("label").setPredictionCol("prediction").setMetricName("rmse")
+
+val rmse = evaluator.evaluate(predictions)
+
+
